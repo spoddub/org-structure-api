@@ -28,3 +28,6 @@ migrate-down:
 
 migrate-status:
 	goose -dir migrations postgres "$(DATABASE_URL)" status
+
+run:
+	go run ./cmd/org-structure-api
