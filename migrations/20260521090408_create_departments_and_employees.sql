@@ -1,14 +1,14 @@
 -- +goose Up
 CREATE TABLE departments
 (
-    department_id BIGSERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     name VARCHAR(200) NOT NULL,
-    parent_id BIGINT REFERENCES departments(department_id) ON DELETE CASCADE,
+    parent_id BIGINT REFERENCES departments(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     CONSTRAINT departments_name_not_blank CHECK (btrim(name) != ''),
-    CONSTRAINT departments_parent_not_self CHECK (parent_id IS NULL OR parent_id != department_id)
+    CONSTRAINT departments_parent_not_self CHECK (parent_id IS NULL OR parent_id != id)
 );
 
 CREATE UNIQUE INDEX departments_unique_name_inside_parent_idx
@@ -24,8 +24,8 @@ CREATE INDEX departments_parent_id_idx
 
 CREATE TABLE employees
 (
-    employee_id BIGSERIAL PRIMARY KEY,
-    department_id BIGINT NOT NULL REFERENCES departments(department_id) ON DELETE CASCADE,
+    id BIGSERIAL PRIMARY KEY,
+    department_id BIGINT NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
     full_name VARCHAR(200) NOT NULL,
     position VARCHAR(200) NOT NULL,
     hired_at DATE,
