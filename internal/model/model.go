@@ -14,11 +14,11 @@ type Department struct {
 }
 
 func (Department) TableName() string {
-	return "department"
+	return "departments"
 }
 
 type Employee struct {
-	ID           int64      `gorm:"primaryKey; column:id" json:"id"`
+	ID           int64      `gorm:"primaryKey;column:id" json:"id"`
 	DepartmentID int64      `gorm:"column:department_id" json:"department_id"`
 	FullName     string     `gorm:"column:full_name" json:"full_name"`
 	Position     string     `gorm:"column:position" json:"position"`
@@ -28,5 +28,5 @@ type Employee struct {
 }
 
 func (Employee) TableName() string {
-	return "employee"
+	return "employees"
 }

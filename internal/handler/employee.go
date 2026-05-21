@@ -50,27 +50,34 @@ func (h *Handler) createEmployee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hiredAt, err := checkHiredDate(params.HiredAt)
+	hiredAtValue, hasHired, err := checkHiredDate(params.HiredAt)
 	if err != nil {
 		http.Error(w, "invalid hired date, expected format YYYY-MM-DD", http.StatusBadRequest)
 		return
 	}
 
-	response := CreateEmployeeResponse{
-		DepartmentID: departmentID,
-		FullName:     params.FullName,
-		Position:     params.Position,
-		HiredAt:      hiredAt,
+	var hiredAt *time.Time
+	if hasHired {
+		hiredAt = &hiredAtValue
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+	exists, err := h.departmentRepo.Exists(r.Context(), departmentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	err = json.NewEncoder(w).Encode(response)
+	if !exists {
+		http.Error(w, "department not found", http.StatusNotFound)
+	}
+
+	employee, err := h.employeeRepo.Create(r.Context(), departmentID, params.FullName, params.Position, hiredAt)
 	if err != nil {
 		http.Error(w, "error creating employee", http.StatusInternalServerError)
 		return
 	}
+
+	writeJSON(w, http.StatusCreated, employee)
 }
 
 func checkFullName(name string) error {
@@ -97,20 +104,20 @@ func checkPosition(position string) error {
 	return nil
 }
 
-func checkHiredDate(hiredAt *string) (*time.Time, error) {
+func checkHiredDate(hiredAt *string) (time.Time, bool, error) {
 	if hiredAt == nil {
-		return nil, nil
+		return time.Time{}, false, nil
 	}
 
 	trimmedTime := strings.TrimSpace(*hiredAt)
 	if trimmedTime == "" {
-		return nil, nil
+		return time.Time{}, false, nil
 	}
 
 	t, err := time.Parse("2006-01-02", trimmedTime)
 	if err != nil {
-		return nil, err
+		return time.Time{}, false, err
 	}
 
-	return &t, nil
+	return t, true, nil
 }

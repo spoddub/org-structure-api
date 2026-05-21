@@ -34,18 +34,26 @@ func (h *Handler) createDepartment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := CreateDepartmentResponse{
-		Name:     params.Name,
-		ParentID: params.ParentID,
+	if params.ParentID != nil {
+		exists, err := h.departmentRepo.Exists(r.Context(), *params.ParentID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if !exists {
+			http.Error(w, "parent department not found", http.StatusNotFound)
+			return
+		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	department, err := h.departmentRepo.Create(r.Context(), params.Name, params.ParentID)
+	if err != nil {
+		http.Error(w, "error creating department", http.StatusInternalServerError)
 		return
 	}
+
+	writeJSON(w, http.StatusCreated, department)
 }
 
 func checkDepartmentName(name string) error {
