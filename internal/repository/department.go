@@ -37,3 +37,25 @@ func (r *DepartmentRepository) Exists(ctx context.Context, id int64) (bool, erro
 
 	return count > 0, nil
 }
+
+func (r *DepartmentRepository) GetByID(ctx context.Context, id int64) (*model.Department, error) {
+	var department model.Department
+
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&department).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &department, nil
+}
+
+func (r *DepartmentRepository) ListChildren(ctx context.Context, parentID int64) ([]model.Department, error) {
+	var departments []model.Department
+
+	err := r.db.WithContext(ctx).Where("parent_id = ?", parentID).Find(&departments).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return departments, nil
+}

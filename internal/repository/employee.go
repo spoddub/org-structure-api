@@ -30,3 +30,18 @@ func (r *EmployeeRepository) Create(ctx context.Context, departmentID int64, ful
 
 	return employee, nil
 }
+
+func (r *EmployeeRepository) ListByDepartmentID(ctx context.Context, departmentID int64) ([]*model.Employee, error) {
+	var employees []*model.Employee
+
+	err := r.db.WithContext(ctx).
+		Where("department_id = ?", departmentID).
+		Order("created_at ASC").
+		Find(&employees).
+		Error
+	if err != nil {
+		return nil, err
+	}
+
+	return employees, nil
+}
