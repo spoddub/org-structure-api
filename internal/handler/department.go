@@ -13,11 +13,6 @@ type CreateDepartmentParams struct {
 	ParentID *int64 `json:"parent_id"`
 }
 
-type CreateDepartmentResponse struct {
-	Name     string `json:"name"`
-	ParentID *int64 `json:"parent_id"`
-}
-
 func (h *Handler) createDepartment(w http.ResponseWriter, r *http.Request) {
 	var params CreateDepartmentParams
 

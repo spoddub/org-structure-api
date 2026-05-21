@@ -16,13 +16,6 @@ type CreateEmployeeParams struct {
 	HiredAt  *string `json:"hired_at"`
 }
 
-type CreateEmployeeResponse struct {
-	DepartmentID int64      `json:"department_id"`
-	FullName     string     `json:"full_name"`
-	Position     string     `json:"position"`
-	HiredAt      *time.Time `json:"hired_at"`
-}
-
 func (h *Handler) createEmployee(w http.ResponseWriter, r *http.Request) {
 	departmentIDStr := r.PathValue("id")
 	departmentID, err := strconv.ParseInt(departmentIDStr, 10, 64)
@@ -69,6 +62,7 @@ func (h *Handler) createEmployee(w http.ResponseWriter, r *http.Request) {
 
 	if !exists {
 		http.Error(w, "department not found", http.StatusNotFound)
+		return
 	}
 
 	employee, err := h.employeeRepo.Create(r.Context(), departmentID, params.FullName, params.Position, hiredAt)
