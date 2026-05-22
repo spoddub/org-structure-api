@@ -21,6 +21,11 @@ func main() {
 		databaseURL = "postgres://postgres:postgres@localhost:5432/org_structure_api?sslmode=disable"
 	}
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	database, err := db.Open(databaseURL)
 	if err != nil {
 		log.Fatal(err)
@@ -32,9 +37,11 @@ func main() {
 	h := handler.NewHandler(departmentRepo, employeeRepo)
 	r := handler.NewRouter(h)
 
-	log.Println("Starting server on :8080")
+	addr := ":" + port
 
-	if err := http.ListenAndServe(":8080", r); err != nil {
+	log.Println("Starting server on", addr)
+
+	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatal(err)
 	}
 }
