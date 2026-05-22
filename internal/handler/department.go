@@ -18,10 +18,20 @@ type CreateDepartmentParams struct {
 	ParentID *int64 `json:"parent_id"`
 }
 
+type UpdateDepartmentParams struct {
+	Name     *string       `json:"name"`
+	ParentID OptionalInt64 `json:"parent_id"`
+}
+
 type DepartmentNodeResponse struct {
 	Department model.Department         `json:"department"`
 	Employees  []*model.Employee        `json:"employees"`
 	Children   []DepartmentNodeResponse `json:"children"`
+}
+
+type OptionalInt64 struct {
+	Set   bool
+	Value *int64
 }
 
 func (h *Handler) createDepartment(w http.ResponseWriter, r *http.Request) {
@@ -106,6 +116,90 @@ func (h *Handler) getDepartmentByID(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, response)
 
+}
+
+func (h *Handler) updateDepartment(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid department id", http.StatusBadRequest)
+		return
+	}
+
+	var params UpdateDepartmentParams
+
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	department, err := h.departmentRepo.GetByID(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "department not found", http.StatusNotFound)
+			return
+		}
+
+		http.Error(w, "error getting department", http.StatusInternalServerError)
+		return
+	}
+
+	if params.Name != nil {
+		name := strings.TrimSpace(*params.Name)
+
+		if err := checkDepartmentName(name); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		department.Name = name
+	}
+
+	if params.ParentID.Set {
+		if params.ParentID.Value == nil {
+			department.ParentID = nil
+		} else {
+			newParentID := *params.ParentID.Value
+
+			if newParentID == id {
+				http.Error(w, "department cannot be parent of itself", http.StatusBadRequest)
+				return
+			}
+
+			exists, err := h.departmentRepo.Exists(r.Context(), newParentID)
+			if err != nil {
+				http.Error(w, "error checking parent department", http.StatusInternalServerError)
+				return
+			}
+
+			if !exists {
+				http.Error(w, "parent department not found", http.StatusNotFound)
+				return
+			}
+
+			isDescendant, err := h.departmentRepo.IsDescendant(r.Context(), id, newParentID)
+			if err != nil {
+				http.Error(w, "error checking department tree", http.StatusInternalServerError)
+				return
+			}
+
+			if isDescendant {
+				http.Error(w, "cannot move department inside its own subtree", http.StatusConflict)
+				return
+			}
+
+			department.ParentID = &newParentID
+		}
+	}
+
+	updatedDepartment, err := h.departmentRepo.Update(r.Context(), department)
+	if err != nil {
+		http.Error(w, "error updating department", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, updatedDepartment)
 }
 
 func checkDepartmentName(name string) error {
@@ -195,4 +289,23 @@ func (h *Handler) buildDepartmentNode(
 	}
 
 	return node, nil
+}
+
+func (o *OptionalInt64) UnmarshalJSON(data []byte) error {
+	o.Set = true
+
+	raw := strings.TrimSpace(string(data))
+	if raw == "null" {
+		o.Value = nil
+		return nil
+	}
+
+	var value int64
+	if err := json.Unmarshal(data, &value); err != nil {
+		return errors.New("parent_id must be integer or null")
+	}
+
+	o.Value = &value
+
+	return nil
 }

@@ -8,6 +8,7 @@ func NewRouter(h *Handler) http.Handler {
 	mux.HandleFunc("POST /departments/", h.createDepartment)
 	mux.HandleFunc("POST /departments/{id}/employees/", h.createEmployee)
 	mux.HandleFunc("GET /departments/{id}", h.getDepartmentByID)
+	mux.HandleFunc("PATCH /departments/{id}", h.updateDepartment)
 
 	return mux
 }

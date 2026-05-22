@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"org-structure-api/internal/model"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -58,4 +59,46 @@ func (r *DepartmentRepository) ListChildren(ctx context.Context, parentID int64)
 	}
 
 	return departments, nil
+}
+
+func (r *DepartmentRepository) Update(ctx context.Context, department *model.Department) (*model.Department, error) {
+	parentID := any(nil)
+	if department.ParentID != nil {
+		parentID = *department.ParentID
+	}
+
+	updates := map[string]any{
+		"name":       department.Name,
+		"parent_id":  parentID,
+		"updated_at": time.Now(),
+	}
+
+	err := r.db.WithContext(ctx).Model(model.Department{}).Where("id = ?", department.ID).Updates(updates).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return r.GetByID(ctx, department.ID)
+}
+
+func (r *DepartmentRepository) IsDescendant(ctx context.Context, departmentID int64, possibleDescendant int64) (bool, error) {
+	var exists bool
+
+	err := r.db.WithContext(ctx).Raw(`
+			WITH RECURSIVE subtree as (
+			SElECT id
+			FROM departments
+			WHERE parent_id = ?
+			UNION ALL
+			
+			SELECT departments.id
+			FROM departments
+			JOIN subtree on departments.parent_id = subtree.id)
+			SELECT EXISTS (SELECT 1 FROM subtree WHERE id = ?)`,
+		departmentID, possibleDescendant).Scan(&exists).Error
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
 }
