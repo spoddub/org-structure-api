@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"org-structure-api/internal/model"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"org-structure-api/internal/model"
 
 	"gorm.io/gorm"
 )
@@ -53,7 +54,7 @@ func (h *Handler) createDepartment(w http.ResponseWriter, r *http.Request) {
 	if params.ParentID != nil {
 		exists, err := h.departmentRepo.Exists(r.Context(), *params.ParentID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, "error checking parent department", http.StatusInternalServerError)
 			return
 		}
 
@@ -61,6 +62,17 @@ func (h *Handler) createDepartment(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "parent department not found", http.StatusNotFound)
 			return
 		}
+	}
+
+	nameExists, err := h.departmentRepo.ExistsByNameAndParent(r.Context(), params.Name, params.ParentID, nil)
+	if err != nil {
+		http.Error(w, "error checking department name", http.StatusInternalServerError)
+		return
+	}
+
+	if nameExists {
+		http.Error(w, "department with this name already exists", http.StatusConflict)
+		return
 	}
 
 	department, err := h.departmentRepo.Create(r.Context(), params.Name, params.ParentID)
@@ -115,7 +127,6 @@ func (h *Handler) getDepartmentByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, response)
-
 }
 
 func (h *Handler) updateDepartment(w http.ResponseWriter, r *http.Request) {
@@ -193,6 +204,22 @@ func (h *Handler) updateDepartment(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	nameExists, err := h.departmentRepo.ExistsByNameAndParent(
+		r.Context(),
+		department.Name,
+		department.ParentID,
+		&id,
+	)
+	if err != nil {
+		http.Error(w, "error checking department name", http.StatusInternalServerError)
+		return
+	}
+
+	if nameExists {
+		http.Error(w, "department with this name already exists", http.StatusConflict)
+		return
+	}
+
 	updatedDepartment, err := h.departmentRepo.Update(r.Context(), department)
 	if err != nil {
 		http.Error(w, "error updating department", http.StatusInternalServerError)
@@ -214,6 +241,93 @@ func checkDepartmentName(name string) error {
 	return nil
 }
 
+func (h *Handler) deleteDepartment(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid department id", http.StatusBadRequest)
+		return
+	}
+
+	mode := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("mode")))
+	if mode == "" {
+		http.Error(w, "mode is required", http.StatusBadRequest)
+		return
+	}
+
+	exists, err := h.departmentRepo.Exists(r.Context(), id)
+	if err != nil {
+		http.Error(w, "error checking department", http.StatusInternalServerError)
+		return
+	}
+
+	if !exists {
+		http.Error(w, "department not found", http.StatusNotFound)
+		return
+	}
+
+	switch mode {
+	case "cascade":
+		if err := h.departmentRepo.DeleteCascade(r.Context(), id); err != nil {
+			http.Error(w, "error deleting department", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+
+	case "reassign":
+		reassignToStr := r.URL.Query().Get("reassign_to_department_id")
+		if reassignToStr == "" {
+			http.Error(w, "reassign_to_department_id is required", http.StatusBadRequest)
+			return
+		}
+
+		reassignToID, err := strconv.ParseInt(reassignToStr, 10, 64)
+		if err != nil {
+			http.Error(w, "invalid reassign_to_department_id", http.StatusBadRequest)
+			return
+		}
+
+		if reassignToID == id {
+			http.Error(w, "cannot reassign employees to deleted department", http.StatusBadRequest)
+			return
+		}
+
+		targetExists, err := h.departmentRepo.Exists(r.Context(), reassignToID)
+		if err != nil {
+			http.Error(w, "error checking target department", http.StatusInternalServerError)
+			return
+		}
+
+		if !targetExists {
+			http.Error(w, "target department not found", http.StatusNotFound)
+			return
+		}
+
+		isDescendant, err := h.departmentRepo.IsDescendant(r.Context(), id, reassignToID)
+		if err != nil {
+			http.Error(w, "error checking department tree", http.StatusInternalServerError)
+			return
+		}
+
+		if isDescendant {
+			http.Error(w, "cannot reassign employees to department inside deleted subtree", http.StatusConflict)
+			return
+		}
+
+		if err := h.departmentRepo.DeleteReassign(r.Context(), id, reassignToID); err != nil {
+			http.Error(w, "error deleting department", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "invalid delete mode", http.StatusBadRequest)
+	}
+}
+
 func checkDepth(depthStr string) (int, error) {
 	if depthStr == "" {
 		return 1, nil
@@ -229,7 +343,7 @@ func checkDepth(depthStr string) (int, error) {
 	}
 
 	if depth > 5 {
-		return 0, errors.New("depth must be between <= 5")
+		return 0, errors.New("depth must be <= 5")
 	}
 
 	return depth, nil
@@ -237,6 +351,7 @@ func checkDepth(depthStr string) (int, error) {
 
 func checkIncludeEmployees(include string) (bool, error) {
 	include = strings.TrimSpace(strings.ToLower(include))
+
 	switch include {
 	case "":
 		return true, nil

@@ -39,6 +39,35 @@ func (r *DepartmentRepository) Exists(ctx context.Context, id int64) (bool, erro
 	return count > 0, nil
 }
 
+func (r *DepartmentRepository) ExistsByNameAndParent(
+	ctx context.Context,
+	name string,
+	parentID *int64,
+	excludeID *int64,
+) (bool, error) {
+	var count int64
+
+	query := r.db.WithContext(ctx).
+		Model(model.Department{}).
+		Where("lower(name) = lower(?)", name)
+
+	if parentID == nil {
+		query = query.Where("parent_id IS NULL")
+	} else {
+		query = query.Where("parent_id = ?", *parentID)
+	}
+
+	if excludeID != nil {
+		query = query.Where("id <> ?", *excludeID)
+	}
+
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
 func (r *DepartmentRepository) GetByID(ctx context.Context, id int64) (*model.Department, error) {
 	var department model.Department
 
@@ -85,20 +114,127 @@ func (r *DepartmentRepository) IsDescendant(ctx context.Context, departmentID in
 	var exists bool
 
 	err := r.db.WithContext(ctx).Raw(`
-			WITH RECURSIVE subtree as (
-			SElECT id
+		WITH RECURSIVE subtree(id) AS (
+			SELECT id
 			FROM departments
 			WHERE parent_id = ?
+
 			UNION ALL
-			
+
 			SELECT departments.id
 			FROM departments
-			JOIN subtree on departments.parent_id = subtree.id)
-			SELECT EXISTS (SELECT 1 FROM subtree WHERE id = ?)`,
-		departmentID, possibleDescendant).Scan(&exists).Error
+			JOIN subtree ON departments.parent_id = subtree.id
+		)
+		SELECT EXISTS (
+			SELECT 1
+			FROM subtree
+			WHERE id = ?
+		)
+	`, departmentID, possibleDescendant).Scan(&exists).Error
 	if err != nil {
 		return false, err
 	}
 
 	return exists, nil
+}
+
+func (r *DepartmentRepository) DeleteCascade(ctx context.Context, id int64) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`
+			WITH RECURSIVE subtree(id) AS (
+				SELECT id
+				FROM departments
+				WHERE id = ?
+
+				UNION ALL
+
+				SELECT departments.id
+				FROM departments
+				JOIN subtree ON departments.parent_id = subtree.id
+			)
+			DELETE FROM employees
+			WHERE department_id IN (
+				SELECT id
+				FROM subtree
+			)
+		`, id).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Exec(`
+			WITH RECURSIVE subtree(id) AS (
+				SELECT id
+				FROM departments
+				WHERE id = ?
+
+				UNION ALL
+
+				SELECT departments.id
+				FROM departments
+				JOIN subtree ON departments.parent_id = subtree.id
+			)
+			DELETE FROM departments
+			WHERE id IN (
+				SELECT id
+				FROM subtree
+			)
+		`, id).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (r *DepartmentRepository) DeleteReassign(ctx context.Context, id int64, reassignToID int64) error {
+	now := time.Now()
+
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		err := tx.Exec(`
+			WITH RECURSIVE subtree(id) AS (
+				SELECT id
+				FROM departments
+				WHERE id = ?
+
+				UNION ALL
+
+				SELECT departments.id
+				FROM departments
+				JOIN subtree ON departments.parent_id = subtree.id
+			)
+			UPDATE employees
+			SET department_id = ?, updated_at = ?
+			WHERE department_id IN (
+				SELECT id
+				FROM subtree
+			)
+		`, id, reassignToID, now).Error
+		if err != nil {
+			return err
+		}
+
+		err = tx.Exec(`
+			WITH RECURSIVE subtree(id) AS (
+				SELECT id
+				FROM departments
+				WHERE id = ?
+
+				UNION ALL
+
+				SELECT departments.id
+				FROM departments
+				JOIN subtree ON departments.parent_id = subtree.id
+			)
+			DELETE FROM departments
+			WHERE id IN (
+				SELECT id
+				FROM subtree
+			)
+		`, id).Error
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
