@@ -16,6 +16,19 @@ type CreateEmployeeParams struct {
 	HiredAt  *string `json:"hired_at"`
 }
 
+// createEmployee godoc
+// @Summary Create employee
+// @Description Create a new employee in an existing department.
+// @Tags employees
+// @Accept json
+// @Produce json
+// @Param id path int true "Department ID"
+// @Param request body CreateEmployeeParams true "Employee payload"
+// @Success 201 {object} model.Employee
+// @Failure 400 {string} string "invalid request"
+// @Failure 404 {string} string "department not found"
+// @Failure 500 {string} string "internal server error"
+// @Router /departments/{id}/employees/ [post]
 func (h *Handler) createEmployee(w http.ResponseWriter, r *http.Request) {
 	departmentIDStr := r.PathValue("id")
 	departmentID, err := strconv.ParseInt(departmentIDStr, 10, 64)

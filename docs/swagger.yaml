@@ -7,6 +7,15 @@ definitions:
       parent_id:
         type: integer
     type: object
+  handler.CreateEmployeeParams:
+    properties:
+      full_name:
+        type: string
+      hired_at:
+        type: string
+      position:
+        type: string
+    type: object
   handler.DepartmentNodeResponse:
     properties:
       children:
@@ -19,6 +28,21 @@ definitions:
         items:
           $ref: '#/definitions/model.Employee'
         type: array
+    type: object
+  handler.OptionalInt64:
+    properties:
+      set:
+        type: boolean
+      value:
+        format: int64
+        type: integer
+    type: object
+  handler.UpdateDepartmentParams:
+    properties:
+      name:
+        type: string
+      parent_id:
+        $ref: '#/definitions/handler.OptionalInt64'
     type: object
   model.Department:
     properties:
@@ -184,4 +208,86 @@ paths:
       summary: Get department tree
       tags:
       - departments
+    patch:
+      consumes:
+      - application/json
+      description: Update department name or parent_id. Use parent_id=null to move
+        department to root.
+      parameters:
+      - description: Department ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Department update payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.UpdateDepartmentParams'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Department'
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "404":
+          description: department not found
+          schema:
+            type: string
+        "409":
+          description: conflict
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      summary: Update department
+      tags:
+      - departments
+  /departments/{id}/employees/:
+    post:
+      consumes:
+      - application/json
+      description: Create a new employee in an existing department.
+      parameters:
+      - description: Department ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Employee payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateEmployeeParams'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.Employee'
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "404":
+          description: department not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      summary: Create employee
+      tags:
+      - employees
 swagger: "2.0"

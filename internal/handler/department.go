@@ -155,6 +155,20 @@ func (h *Handler) getDepartmentByID(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
+// updateDepartment godoc
+// @Summary Update department
+// @Description Update department name or parent_id. Use parent_id=null to move department to root.
+// @Tags departments
+// @Accept json
+// @Produce json
+// @Param id path int true "Department ID"
+// @Param request body UpdateDepartmentParams true "Department update payload"
+// @Success 200 {object} model.Department
+// @Failure 400 {string} string "invalid request"
+// @Failure 404 {string} string "department not found"
+// @Failure 409 {string} string "conflict"
+// @Failure 500 {string} string "internal server error"
+// @Router /departments/{id} [patch]
 func (h *Handler) updateDepartment(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 
