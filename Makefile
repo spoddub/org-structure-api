@@ -31,3 +31,5 @@ migrate-status:
 
 run:
 	go run ./cmd/org-structure-api
+swagger:
+	swag init -g cmd/org-structure-api/main.go -d ./cmd/org-structure-api,./internal --parseInternal

@@ -35,6 +35,19 @@ type OptionalInt64 struct {
 	Value *int64
 }
 
+// createDepartment godoc
+// @Summary Create department
+// @Description Create a new department. Department name must be unique within the same parent.
+// @Tags departments
+// @Accept json
+// @Produce json
+// @Param request body CreateDepartmentParams true "Department payload"
+// @Success 201 {object} model.Department
+// @Failure 400 {string} string "invalid json"
+// @Failure 404 {string} string "parent department not found"
+// @Failure 409 {string} string "department with this name already exists"
+// @Failure 500 {string} string "internal server error"
+// @Router /departments/ [post]
 func (h *Handler) createDepartment(w http.ResponseWriter, r *http.Request) {
 	var params CreateDepartmentParams
 
@@ -84,6 +97,19 @@ func (h *Handler) createDepartment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, department)
 }
 
+// getDepartmentByID godoc
+// @Summary Get department tree
+// @Description Get department details, employees, and child departments up to selected depth.
+// @Tags departments
+// @Produce json
+// @Param id path int true "Department ID"
+// @Param depth query int false "Tree depth, default 1, max 5"
+// @Param include_employees query bool false "Include employees, default true"
+// @Success 200 {object} DepartmentNodeResponse
+// @Failure 400 {string} string "invalid request"
+// @Failure 404 {string} string "department not found"
+// @Failure 500 {string} string "internal server error"
+// @Router /departments/{id} [get]
 func (h *Handler) getDepartmentByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 
@@ -241,6 +267,19 @@ func checkDepartmentName(name string) error {
 	return nil
 }
 
+// deleteDepartment godoc
+// @Summary Delete department
+// @Description Delete department using cascade or reassign mode.
+// @Tags departments
+// @Param id path int true "Department ID"
+// @Param mode query string true "Delete mode: cascade or reassign"
+// @Param reassign_to_department_id query int false "Target department ID for reassign mode"
+// @Success 204
+// @Failure 400 {string} string "invalid request"
+// @Failure 404 {string} string "department not found"
+// @Failure 409 {string} string "conflict"
+// @Failure 500 {string} string "internal server error"
+// @Router /departments/{id} [delete]
 func (h *Handler) deleteDepartment(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 

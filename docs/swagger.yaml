@@ -1,0 +1,187 @@
+basePath: /
+definitions:
+  handler.CreateDepartmentParams:
+    properties:
+      name:
+        type: string
+      parent_id:
+        type: integer
+    type: object
+  handler.DepartmentNodeResponse:
+    properties:
+      children:
+        items:
+          $ref: '#/definitions/handler.DepartmentNodeResponse'
+        type: array
+      department:
+        $ref: '#/definitions/model.Department'
+      employees:
+        items:
+          $ref: '#/definitions/model.Employee'
+        type: array
+    type: object
+  model.Department:
+    properties:
+      children:
+        items:
+          $ref: '#/definitions/model.Department'
+        type: array
+      created_at:
+        type: string
+      employees:
+        items:
+          $ref: '#/definitions/model.Employee'
+        type: array
+      id:
+        type: integer
+      name:
+        type: string
+      parent_id:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  model.Employee:
+    properties:
+      created_at:
+        type: string
+      department_id:
+        type: integer
+      full_name:
+        type: string
+      hired_at:
+        type: string
+      id:
+        type: integer
+      position:
+        type: string
+      updated_at:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: REST API for managing departments, employees, and organizational structure
+    tree.
+  title: Org Structure API
+  version: "1.0"
+paths:
+  /departments/:
+    post:
+      consumes:
+      - application/json
+      description: Create a new department. Department name must be unique within
+        the same parent.
+      parameters:
+      - description: Department payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateDepartmentParams'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.Department'
+        "400":
+          description: invalid json
+          schema:
+            type: string
+        "404":
+          description: parent department not found
+          schema:
+            type: string
+        "409":
+          description: department with this name already exists
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      summary: Create department
+      tags:
+      - departments
+  /departments/{id}:
+    delete:
+      description: Delete department using cascade or reassign mode.
+      parameters:
+      - description: Department ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 'Delete mode: cascade or reassign'
+        in: query
+        name: mode
+        required: true
+        type: string
+      - description: Target department ID for reassign mode
+        in: query
+        name: reassign_to_department_id
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "404":
+          description: department not found
+          schema:
+            type: string
+        "409":
+          description: conflict
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      summary: Delete department
+      tags:
+      - departments
+    get:
+      description: Get department details, employees, and child departments up to
+        selected depth.
+      parameters:
+      - description: Department ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Tree depth, default 1, max 5
+        in: query
+        name: depth
+        type: integer
+      - description: Include employees, default true
+        in: query
+        name: include_employees
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.DepartmentNodeResponse'
+        "400":
+          description: invalid request
+          schema:
+            type: string
+        "404":
+          description: department not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      summary: Get department tree
+      tags:
+      - departments
+swagger: "2.0"

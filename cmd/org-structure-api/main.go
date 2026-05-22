@@ -3,12 +3,18 @@ package main
 import (
 	"log"
 	"net/http"
+	_ "org-structure-api/docs"
 	"org-structure-api/internal/db"
 	"org-structure-api/internal/handler"
 	"org-structure-api/internal/repository"
 	"os"
 )
 
+// @title Org Structure API
+// @version 1.0
+// @description REST API for managing departments, employees, and organizational structure tree.
+// @host localhost:8080
+// @BasePath /
 func main() {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
