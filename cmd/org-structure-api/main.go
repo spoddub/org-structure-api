@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"org-structure-api/internal/handler"
 	"org-structure-api/internal/repository"
 )
+
+var errAnalyticsDisabled = errors.New("clickhouse analytics disabled")
 
 // @title Org Structure API
 // @version 1.0
@@ -35,7 +38,11 @@ func main() {
 
 	analyticsWriter, err := openAnalyticsWriter()
 	if err != nil {
-		log.Fatal(err)
+		if errors.Is(err, errAnalyticsDisabled) {
+			log.Println("ClickHouse analytics disabled")
+		} else {
+			log.Fatal(err)
+		}
 	}
 
 	if analyticsWriter != nil {
@@ -64,8 +71,7 @@ func openAnalyticsWriter() (analytics.Writer, error) {
 	password := os.Getenv("CLICKHOUSE_PASSWORD")
 
 	if addr == "" || database == "" || user == "" {
-		log.Println("ClickHouse analytics disabled")
-		return nil, nil
+		return nil, errAnalyticsDisabled
 	}
 
 	return analytics.NewClickHouseWriter(addr, database, user, password)
