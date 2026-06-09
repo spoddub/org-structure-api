@@ -4,7 +4,7 @@
 
 It manages an organizational structure with departments and employees. Departments can be nested through `parent_id`, so the API can return a department tree with employees and child departments.
 
-The service supports department creation, employee creation, department tree retrieval, department moving, cascade deletion and employee reassignment.
+The service supports department creation, employee creation, department tree retrieval, department moving, cascade deletion and employee reassignment. It also writes append-only analytics events to ClickHouse after successful department and employee creation.
 
 ---
 
@@ -24,6 +24,8 @@ The service supports department creation, employee creation, department tree ret
 - Delete department in `reassign` mode
 - Unique department names inside the same parent
 - PostgreSQL storage
+- ClickHouse analytics event storage
+- Append-only analytics events for department and employee creation
 - Database migrations with goose
 - GORM repository layer
 - Swagger API documentation
@@ -41,11 +43,13 @@ The service supports department creation, employee creation, department tree ret
 | [net/http](https://pkg.go.dev/net/http) | HTTP server and routing |
 | [GORM](https://gorm.io/) | ORM and database access |
 | [PostgreSQL](https://www.postgresql.org/) | Persistent storage |
+| [ClickHouse](https://clickhouse.com/) | Analytics event storage |
+| [clickhouse-go](https://github.com/ClickHouse/clickhouse-go) | Go client for ClickHouse |
 | [goose](https://github.com/pressly/goose) | Database migrations |
 | [swaggo/swag](https://github.com/swaggo/swag) | Swagger documentation generation |
 | [http-swagger](https://github.com/swaggo/http-swagger) | Swagger UI for `net/http` |
 | [Docker](https://www.docker.com/) | Containerized application runtime |
-| [Docker Compose](https://docs.docker.com/compose/) | Local app and PostgreSQL environment |
+| [Docker Compose](https://docs.docker.com/compose/) | Local app, PostgreSQL and ClickHouse environment |
 | [Make](https://www.gnu.org/software/make/) | Common development commands |
 | [golangci-lint](https://golangci-lint.run/) | Go linter |
 | [testing](https://pkg.go.dev/testing) | Unit and handler tests |
@@ -88,6 +92,40 @@ make swagger
 ### Employees
 
 - `POST /departments/{id}/employees/` - create an employee inside a department
+
+---
+
+## Analytics events
+
+PostgreSQL is the source of truth for departments and employees. ClickHouse stores append-only analytics events written after successful API operations.
+
+Currently written events:
+
+- `department_created`
+- `employee_created`
+
+Analytics events are stored in the `analytics_events` table.
+
+Main fields:
+
+- `event_time`
+- `event_type`
+- `entity_type`
+- `entity_id`
+- `department_id`
+- `metadata`
+
+Example query:
+
+```bash
+docker exec -it org-structure-api-clickhouse clickhouse-client \
+  --user default \
+  --password clickhouse \
+  --database org_structure_analytics \
+  --query "SELECT event_time, event_type, entity_type, entity_id, department_id, metadata FROM analytics_events ORDER BY event_time DESC LIMIT 10;"
+```
+
+ClickHouse analytics is internal and does not add public HTTP endpoints. Swagger documentation does not need to change for these events.
 
 ---
 
@@ -464,26 +502,34 @@ For local development:
 ```env
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/org_structure_api?sslmode=disable
 PORT=8080
+CLICKHOUSE_ADDR=localhost:9000
+CLICKHOUSE_DATABASE=org_structure_analytics
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=clickhouse
 ```
 
-For Docker Compose, the app uses the PostgreSQL service name as host:
+For Docker Compose, the app uses service names as hosts:
 
 ```env
 DATABASE_URL=postgres://postgres:postgres@postgres:5432/org_structure_api?sslmode=disable
 PORT=8080
+CLICKHOUSE_ADDR=clickhouse:9000
+CLICKHOUSE_DATABASE=org_structure_analytics
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=clickhouse
 ```
 
 ---
 
 ## Full Docker run
 
-Build and run the app together with PostgreSQL:
+Build and run the app together with PostgreSQL and ClickHouse:
 
 ```bash
 docker compose up --build
 ```
 
-The Docker app container applies database migrations automatically before starting the server.
+The Docker app container applies PostgreSQL migrations automatically before starting the server.
 
 The app listens on:
 
@@ -503,7 +549,7 @@ Stop Docker Compose services:
 docker compose down
 ```
 
-Remove containers and database volume:
+Remove containers and database volumes:
 
 ```bash
 docker compose down -v
@@ -511,12 +557,12 @@ docker compose down -v
 
 ---
 
-## Local run with PostgreSQL from Docker
+## Local run with PostgreSQL and ClickHouse from Docker
 
-Start PostgreSQL only:
+Start PostgreSQL and ClickHouse:
 
 ```bash
-docker compose up -d postgres
+docker compose up -d postgres clickhouse
 ```
 
 Apply migrations:
@@ -541,19 +587,21 @@ http://localhost:8080
 
 ## Migrations
 
-Apply migrations:
+PostgreSQL migrations are stored in `migrations/`.
+
+Apply PostgreSQL migrations:
 
 ```bash
 make migrate-up
 ```
 
-Check migration status:
+Check PostgreSQL migration status:
 
 ```bash
 make migrate-status
 ```
 
-Rollback the last migration:
+Rollback the last PostgreSQL migration:
 
 ```bash
 make migrate-down
@@ -563,6 +611,42 @@ Manual goose command:
 
 ```bash
 goose -dir migrations postgres "postgres://postgres:postgres@localhost:5432/org_structure_api?sslmode=disable" up
+```
+
+ClickHouse analytics migration is stored separately:
+
+```text
+migrations/clickhouse/20260609143000_create_analytics_events.sql
+```
+
+For a fresh ClickHouse volume, create the analytics table:
+
+```bash
+docker exec -i org-structure-api-clickhouse clickhouse-client \
+  --user default \
+  --password clickhouse \
+  --database org_structure_analytics <<'SQL'
+CREATE TABLE IF NOT EXISTS analytics_events (
+    event_time DateTime,
+    event_type String,
+    entity_type String,
+    entity_id UInt64,
+    department_id Nullable(UInt64),
+    metadata String
+)
+ENGINE = MergeTree
+ORDER BY (event_time, event_type, entity_type);
+SQL
+```
+
+Check ClickHouse tables:
+
+```bash
+docker exec -it org-structure-api-clickhouse clickhouse-client \
+  --user default \
+  --password clickhouse \
+  --database org_structure_analytics \
+  --query "SHOW TABLES;"
 ```
 
 ---
@@ -665,7 +749,7 @@ Rollback migration:
 make migrate-down
 ```
 
-Check migration status:
+Check PostgreSQL migration status:
 
 ```bash
 make migrate-status
@@ -693,10 +777,16 @@ docker compose down
 
 ## Database schema
 
-The service uses two main tables:
+The service uses two PostgreSQL tables and one ClickHouse analytics table.
+
+PostgreSQL tables:
 
 - `departments`
 - `employees`
+
+ClickHouse table:
+
+- `analytics_events`
 
 ### departments
 
@@ -735,3 +825,22 @@ Important constraints:
 - `full_name` must not be empty
 - `position` must not be empty
 - `hired_at` is optional
+
+
+### analytics_events
+
+Main fields:
+
+- `event_time`
+- `event_type`
+- `entity_type`
+- `entity_id`
+- `department_id`
+- `metadata`
+
+Stored event types:
+
+- `department_created`
+- `employee_created`
+
+ClickHouse stores analytics events only. PostgreSQL remains the source of truth for departments and employees.
