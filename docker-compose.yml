@@ -16,17 +16,43 @@ services:
       timeout: 5s
       retries: 5
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: org-structure-api-clickhouse
+    environment:
+      CLICKHOUSE_DB: org_structure_analytics
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   app:
     build: .
     container_name: org-structure-api-app
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/org_structure_api?sslmode=disable
       PORT: 8080
+      CLICKHOUSE_ADDR: clickhouse:9000
+      CLICKHOUSE_DATABASE: org_structure_analytics
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      clickhouse:
+        condition: service_healthy
 
 volumes:
   postgres_data:
+  clickhouse_data:
