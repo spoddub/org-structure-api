@@ -32,6 +32,11 @@ func NewClickHouseWriter(addr, database, username, password string) (*ClickHouse
 }
 
 func (w *ClickHouseWriter) Track(ctx context.Context, event Event) error {
+	var departmentID any
+	if event.DepartmentID != nil {
+		departmentID = *event.DepartmentID
+	}
+
 	return w.conn.Exec(ctx, `
 		INSERT INTO analytics_events
 			(event_time, event_type, entity_type, entity_id, department_id, metadata)
@@ -42,7 +47,7 @@ func (w *ClickHouseWriter) Track(ctx context.Context, event Event) error {
 		event.Type,
 		event.EntityType,
 		event.EntityID,
-		event.DepartmentID,
+		departmentID,
 		event.Metadata,
 	)
 }

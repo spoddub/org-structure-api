@@ -15,5 +15,5 @@ type Event struct {
 }
 
 type Writer interface {
-	Track(ctx context.Context, event *Event) error
+	Track(ctx context.Context, event Event) error
 }

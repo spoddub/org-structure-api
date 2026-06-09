@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"org-structure-api/internal/analytics"
 )
 
 type CreateEmployeeParams struct {
@@ -83,6 +85,17 @@ func (h *Handler) createEmployee(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error creating employee", http.StatusInternalServerError)
 		return
 	}
+
+	departmentIDValue := uint64(departmentID)
+
+	h.trackAnalytics(r.Context(), analytics.Event{
+		Time:         time.Now(),
+		Type:         "employee_created",
+		EntityType:   "employee",
+		EntityID:     uint64(employee.ID),
+		DepartmentID: &departmentIDValue,
+		Metadata:     "{}",
+	})
 
 	writeJSON(w, http.StatusCreated, employee)
 }

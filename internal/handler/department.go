@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	"org-structure-api/internal/analytics"
 	"org-structure-api/internal/model"
 
 	"gorm.io/gorm"
@@ -93,6 +95,17 @@ func (h *Handler) createDepartment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error creating department", http.StatusInternalServerError)
 		return
 	}
+
+	departmentID := uint64(department.ID)
+
+	h.trackAnalytics(r.Context(), analytics.Event{
+		Time:         time.Now(),
+		Type:         "department_created",
+		EntityType:   "department",
+		EntityID:     departmentID,
+		DepartmentID: &departmentID,
+		Metadata:     "{}",
+	})
 
 	writeJSON(w, http.StatusCreated, department)
 }
